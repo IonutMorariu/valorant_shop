@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:valorant_shop/Screens/skins_screen.dart';
 import 'package:valorant_shop/Screens/twofa_screen.dart';
-import 'package:valorant_shop/skin.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
@@ -30,6 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _username = '';
   String _password = '';
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -68,6 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (_username.isNotEmpty && _password.isNotEmpty) {
       try {
+        Requests.clearStoredCookies('auth.riotgames.com');
         var response = await Requests.post(
             'https://auth.riotgames.com/api/v1/authorization',
             body: {
@@ -88,6 +89,12 @@ class _LoginScreenState extends State<LoginScreen> {
             },
             bodyEncoding: RequestBodyEncoding.JSON);
         var data = res.json();
+        print(data);
+        if (data['error'] != null) {
+          setState(() {
+            _errorMessage = 'Error: ' + data['error'];
+          });
+        }
         if (data['type'] == 'multifactor') {
           pushToTwoFaRoute(data);
         }
@@ -95,40 +102,19 @@ class _LoginScreenState extends State<LoginScreen> {
           await prefs.setString('username', _username);
           await prefs.setString('password', _password);
         }
+
+        if (data['type'] == 'response' && res.headers['set-cookie'] != null) {
+          var cookies = res.headers['set-cookie'] ?? '';
+          await prefs.setString('cookies', cookies);
+        }
+
         var token = data['response']['parameters']['uri']
             .toString()
             .split('access_token=')[1]
             .split('&scope')[0];
-        var bearer = 'Bearer $token';
-        var tokenData = await dio.post(
-            'https://entitlements.auth.riotgames.com/api/token/v1',
-            options: Options(
-                contentType: 'application/json',
-                headers: {'Authorization': bearer}));
-        var entitlementsToken = tokenData.data['entitlements_token'];
-        var userData = await dio.get('https://auth.riotgames.com/userinfo',
-            options: Options(
-                contentType: 'application/json',
-                headers: {'Authorization': bearer}));
-        var puuid = userData.data['sub'];
-        var storeRequest = await dio.get(
-            'https://pd.eu.a.pvp.net/store/v2/storefront/$puuid',
-            options: Options(headers: {
-              'Authorization': bearer,
-              'X-Riot-Entitlements-JWT': entitlementsToken
-            }));
-        var storeItems =
-            storeRequest.data['SkinsPanelLayout']['SingleItemOffers'];
-        List<Skin> skins = [];
-        storeItems.forEach((item) async {
-          var skinRequest = await dio
-              .get('https://valorant-api.com/v1/weapons/skinlevels/$item');
-          Skin skin = Skin(skinRequest.data['data']['displayName'],
-              skinRequest.data['data']['displayIcon']);
-          skins.add(skin);
-        });
-        print(skins);
-        pushToSkinRoute(skins);
+        prefs.setString('token', token);
+
+        pushToSkinRoute();
       } catch (e) {
         if (e is DioError) {
           print(e.response);
@@ -140,13 +126,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void pushToSkinRoute(skins) {
+  void pushToSkinRoute() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-          builder: (context) => SkinsScreen(
-                skins: skins,
-              )),
+      MaterialPageRoute(builder: (context) => SkinsScreen()),
     );
   }
 
@@ -210,6 +193,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onChanged: (text) {
                       setState(() {
                         _username = text;
+                        _errorMessage = '';
                       });
                     },
                   ),
@@ -245,11 +229,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     onChanged: (text) {
                       setState(() {
                         _password = text;
+                        _errorMessage = '';
                       });
                     },
                   ),
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 15),
+                _errorMessage.isNotEmpty
+                    ? Text(_errorMessage)
+                    : const SizedBox(height: 15),
                 TextButton(
                     onPressed: onPressed,
                     child: Material(

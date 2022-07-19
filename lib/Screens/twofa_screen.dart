@@ -2,9 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:requests/requests.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:valorant_shop/Screens/skins_screen.dart';
-import 'package:valorant_shop/skin.dart';
-import 'package:cookie_jar/cookie_jar.dart';
 
 class TwoFaScreen extends StatefulWidget {
   const TwoFaScreen({Key? key, this.twoFactor, this.cookies}) : super(key: key);
@@ -18,9 +17,11 @@ class TwoFaScreen extends StatefulWidget {
 
 class _TwoFaScreenState extends State<TwoFaScreen> {
   String _code = '';
+  String _errorMessage = '';
   var dio = Dio();
 
   void onPressed() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
     var res =
         await Requests.put('https://auth.riotgames.com/api/v1/authorization',
             body: {
@@ -32,48 +33,31 @@ class _TwoFaScreenState extends State<TwoFaScreen> {
             bodyEncoding: RequestBodyEncoding.JSON);
 
     var data = res.json();
+
+    if (data['error'] == 'multifactor_attempt_failed') {
+      setState(() {
+        _errorMessage = 'Invalid code';
+      });
+      return;
+    }
+
+    if (data['type'] == 'response' && res.headers['set-cookie'] != null) {
+      var cookies = res.headers['set-cookie'] ?? '';
+      await prefs.setString('cookies', cookies);
+    }
+
     var token = data['response']['parameters']['uri']
         .toString()
         .split('access_token=')[1]
         .split('&scope')[0];
-    var bearer = 'Bearer $token';
-    var tokenData = await dio.post(
-        'https://entitlements.auth.riotgames.com/api/token/v1',
-        options: Options(
-            contentType: 'application/json',
-            headers: {'Authorization': bearer}));
-    var entitlementsToken = tokenData.data['entitlements_token'];
-    var userData = await dio.get('https://auth.riotgames.com/userinfo',
-        options: Options(
-            contentType: 'application/json',
-            headers: {'Authorization': bearer}));
-    var puuid = userData.data['sub'];
-    var storeRequest = await dio.get(
-        'https://pd.eu.a.pvp.net/store/v2/storefront/$puuid',
-        options: Options(headers: {
-          'Authorization': bearer,
-          'X-Riot-Entitlements-JWT': entitlementsToken
-        }));
-    var storeItems = storeRequest.data['SkinsPanelLayout']['SingleItemOffers'];
-    List<Skin> skins = [];
-    for (var item in storeItems) {
-      var skinRequest =
-          await dio.get('https://valorant-api.com/v1/weapons/skinlevels/$item');
-      Skin skin = Skin(skinRequest.data['data']['displayName'],
-          skinRequest.data['data']['displayIcon']);
-      skins.add(skin);
-      print(skinRequest.data);
-    }
-    pushToSkinRoute(skins);
+    await prefs.setString('token', token);
+    pushToSkinRoute();
   }
 
-  void pushToSkinRoute(skins) {
+  void pushToSkinRoute() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-          builder: (context) => SkinsScreen(
-                skins: skins,
-              )),
+      MaterialPageRoute(builder: (context) => SkinsScreen()),
     );
   }
 
@@ -87,7 +71,7 @@ class _TwoFaScreenState extends State<TwoFaScreen> {
       child: Center(
         child: Container(
             width: 300,
-            height: 260,
+            height: 270,
             decoration: BoxDecoration(
                 color: Colors.red.shade800,
                 boxShadow: const [
@@ -125,7 +109,7 @@ class _TwoFaScreenState extends State<TwoFaScreen> {
                         border: InputBorder.none,
                         fillColor: Colors.white,
                         filled: true),
-                    keyboardType: TextInputType.text,
+                    keyboardType: TextInputType.number,
                     onChanged: (text) {
                       setState(() {
                         _code = text;
@@ -133,7 +117,10 @@ class _TwoFaScreenState extends State<TwoFaScreen> {
                     },
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
+                _errorMessage.isNotEmpty
+                    ? Text(_errorMessage)
+                    : const SizedBox(height: 10),
                 TextButton(
                     onPressed: onPressed,
                     child: Material(
