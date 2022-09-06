@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:valorant_shop/Screens/login_screen.dart';
+import 'package:valorant_shop/Screens/logs_screen.dart';
 import 'package:valorant_shop/skin.dart';
 
 class SkinsScreen extends StatefulWidget {
@@ -15,6 +16,8 @@ class SkinsScreen extends StatefulWidget {
 class _SkinsScreenState extends State<SkinsScreen> {
   late Future<List<Skin>> skinFuture;
 
+  late String _username;
+
   @override
   void initState() {
     super.initState();
@@ -23,8 +26,12 @@ class _SkinsScreenState extends State<SkinsScreen> {
 
   Future<List<Skin>> getSkinData() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
+    _username = prefs.getString('username') != null
+        ? prefs.getString('username').toString()
+        : '';
     var dio = Dio();
     var token = prefs.getString('token');
+
     if (token == null) {
       throw 'No token';
     }
@@ -87,6 +94,14 @@ class _SkinsScreenState extends State<SkinsScreen> {
         .toList();
     return ListView(
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 15),
+          child: Text(
+            _username,
+            style: const TextStyle(fontSize: 25),
+            textAlign: TextAlign.center,
+          ),
+        ),
         ...texts,
         TextButton(
             onPressed: onLogout,
@@ -115,6 +130,34 @@ class _SkinsScreenState extends State<SkinsScreen> {
                   ),
                 ),
               ),
+            )),
+        TextButton(
+            onPressed: pushLogsRoute,
+            child: Material(
+              elevation: 0.0,
+              type: MaterialType.button,
+              color: Colors.white,
+              shape: const BeveledRectangleBorder(
+                  borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(5),
+                      bottomRight: Radius.circular(5))),
+              child: IconTheme.merge(
+                data: IconThemeData(
+                  color: Colors.white.withOpacity(.8),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(10.0),
+                  child: Center(
+                    widthFactor: 2.0,
+                    heightFactor: 1.0,
+                    child: Text(
+                      "LOGS",
+                      style:
+                          GoogleFonts.oswald(fontSize: 15, color: Colors.red),
+                    ),
+                  ),
+                ),
+              ),
             ))
       ],
     );
@@ -130,6 +173,13 @@ class _SkinsScreenState extends State<SkinsScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const LoginScreen()),
+    );
+  }
+
+  void pushLogsRoute() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const LogsScreen()),
     );
   }
 

@@ -175,10 +175,16 @@ class _MyAppState extends State<MyApp> {
             requiredNetworkType: NetworkType.ANY), (String taskId) async {
       // <-- Event handler
       // This is the fetch-event callback.
+      List<String>? prevLogs =
+          prefs.getStringList('logs') ?? List.empty(growable: true);
       print("[BackgroundFetch] Event received $taskId");
       checkCookie();
 
       final tz.TZDateTime now = tz.TZDateTime.now(tz.UTC);
+      String time =
+          "${now.day}/${now.month} T ${now.hour}:${now.minute}:${now.second}";
+
+      prevLogs.add('Trigger Background task | $time');
 
       print(now.hour);
 
@@ -193,18 +199,25 @@ class _MyAppState extends State<MyApp> {
           return;
         }
 
+        prevLogs.add('Got skins $skinContent | $time');
+
         String username = prefs.getString('username') != null
             ? prefs.getString('username').toString()
             : '';
         //2. Send notitification
         _notificationHelper.sendNotification(
             username, 'New skins', skinContent);
+
+        prevLogs.add('Attempted to send notification $skinContent | $time');
         //3. set gotSkins true
         prefs.setBool('gotSkins', true);
       } else if (now.hour != 0 && (gotSkins == true)) {
         //4. After sending the notification, reset tag
         prefs.setBool('gotSkins', false);
+        prevLogs.add('Reset gotSkins for next time | $time');
       }
+
+      prefs.setStringList('logs', prevLogs);
 
       // IMPORTANT:  You must signal completion of your task or the OS can punish your app
       // for taking too long in the background.
